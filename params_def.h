@@ -61,6 +61,20 @@ enum ParamId : uint16_t {
   PARAM_CALIBRATION_VALUE        = 25,
 
   PARAM_VOICE_MODE               = 26,
+
+  // Voice allocation policy. One value covers both halves of the same decision:
+  // in poly it picks which voice gets stolen when all of them are busy, in mono
+  // it picks which held key sounds.
+  //   0 round-robin        poly least-recently-used   mono last-note
+  //   1 oldest             poly oldest trigger        mono first-note
+  //   2 quietest           poly lowest EnvVCA level   mono last-note
+  //   3 quietest keep low  as 2, spares lowest held   mono low-note
+  //   4 quietest keep high as 2, spares highest held  mono high-note
+  //   5 no stealing        poly drops the note-on     mono first-note, later keys never sound
+  // Every mode prefers an idle voice, then a release tail, before stealing a
+  // held note. See DCO/voices.ino voice_alloc() / DCO/midi.ino note_on().
+  PARAM_VOICE_ALLOC_MODE         = 102,
+
   PARAM_UNISON_DETUNE            = 27,
 
   PARAM_ANALOG_DRIFT_AMOUNT      = 28,
@@ -238,6 +252,18 @@ enum ParamId : uint16_t {
   PARAM_ADSR3_PITCH_MODE         = 223,
 
   // --- Calibration flags (shared) ------------------------------------
+  // 150: starts the blocking auto-calibration; the value selects the stage,
+  // matching the Screen's calibration menu tabs:
+  //   1 = amp-comp tables only  ("AUTO CALIBRATION",  Input menu pos 0)
+  //   2 = PW center/limits only ("PW CALIBRATION",    Input menu pos 1)
+  //   3 = both, PW then amp     ("FULL CALIBRATION",  Input menu pos 2)
+  // Add 4 (5/6/7) to run the same stage at fine precision: slower, far more
+  // careful measurements, and the amp stage then re-measures the stored table
+  // instead of building a new one (so it needs a calibrated board). Panel
+  // only; the Input/Screen menus always send 1/2/3.
+  // Any other non-zero value runs the full pass at normal precision.
+  // 0 cancels a running calibration (the loops poll the request and keep the
+  // previous values of whatever stage was interrupted).
   PARAM_CALIBRATION_FLAG         = 150,
   PARAM_MANUAL_CALIBRATION_FLAG  = 151,
   PARAM_MANUAL_CALIBRATION_STAGE = 152,
@@ -269,6 +295,15 @@ enum ParamId : uint16_t {
   // selected by PARAM_MANUAL_CALIBRATION_STAGE (0..DIV_COUNTER, fits int16).
   // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
   PARAM_AMP_COMP_440             = 159,
+
+  // 161: per-oscillator duty target trim, in hundredths of a percent of duty
+  // (signed, -500..500), for the oscillator selected by
+  // PARAM_MANUAL_CALIBRATION_STAGE. The board's sense pin is a digital input
+  // and reads its own thresholds, so "50% here" can be a fixed offset away
+  // from "50% on a scope"; both amp-comp methods aim at 50% + this trim, so
+  // dialling it once per oscillator nulls the output against the scope.
+  // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
+  PARAM_AMP_COMP_DUTY_OFFSET     = 161,
 
   // --- Preset store / dump commands (DCO-local; tools/dco_control) -----
   // See preset_store.h for the record format and the '[dump]'/'[pdir]'/
