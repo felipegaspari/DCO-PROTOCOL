@@ -85,6 +85,35 @@ agree, or controls silently look ignored. The host tool selects it with
 `dco_control --cobs` or `DCO_SERIAL_COBS=1`. The codec is buffer-in/buffer-out,
 so a later SPI link can reuse `serial_frame_unstuff()` after reading to `0x00`.
 
+## Who mirrors what
+
+A parameter can be changed from three places: the panel, the host tool over USB
+(or a MIDI CC), and a preset recall. Only the panel's own edits start at the
+panel, so the other two have to be mirrored back or the panel state and the
+Screen go stale. The DCO tags its ingress (`g_param_ingress`) and mirrors only
+what did **not** come from the panel, which is what keeps the link from echoing.
+
+| Frame | DCO → panel side | Panel side → Screen |
+|-------|------------------|---------------------|
+| `'a'` EnvVCA | yes, exp-mapped | yes, as `'a'` in fader domain |
+| `'b'` EnvVCF | yes, exp-mapped | yes, as `'b'` in fader domain |
+| `'c'` EnvDCO | yes, exp-mapped | no — the Screen link's `'c'` is char-select |
+| `'d'` filter | yes | as `'p'` 191..194, only the fields that changed |
+| `'p'` | persistable ids only (`preset_param_is_persistable`) | yes, verbatim |
+| `'x'` | gap 154, cal offsets 155 | 154 only |
+| `'O'` / `'L'` | yes | preset name / slot display |
+
+"Panel side" is the Input board on DCO3 and the Mainboard on DCO4; on DCO4 the
+Mainboard owns the analog envelopes and filter, so it applies `'a'`/`'b'`/`'d'`
+itself *and* relays them to the Input, while `'c'` is relay-only.
+
+Two conversions matter. The Input sends the DCO exp-mapped times
+(`linToExpLookup[]`) but sends the Screen raw fader values, so a mirrored ADSR
+block is inverted back to a fader index (`exp_to_lin_index()`) before it is
+stored or displayed. And the filter pots are analog with no ParamId of their
+own, so the Screen learns them through the 191..194 UI ids rather than the `'d'`
+block, which it does not display.
+
 ## Adding a parameter
 
 1. Append a new id in `params_def.h`. Never renumber, and stay at or below 255,

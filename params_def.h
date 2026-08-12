@@ -200,6 +200,16 @@ enum ParamId : uint16_t {
 
   // UI navigation / calibration helper parameters (screen-focused)
   PARAM_UI_MENU_POSITION         = 190,
+
+  // 191-194: Input -> Screen only. The filter pots are analog and live solely
+  // inside the 'd' block, so they had no ParamId; these give the Screen a name
+  // and a toast for a filter change the panel did not make (dco_control, MIDI
+  // CC, preset recall). Never sent to the DCO, never persistable.
+  PARAM_UI_CUTOFF                = 191,
+  PARAM_UI_RESONANCE             = 192,
+  PARAM_UI_ADSR2_TO_VCF          = 193,
+  PARAM_UI_LFO2_TO_VCF           = 194,
+
   PARAM_UI_CALIBRATION_DISMISS   = 199,
   PARAM_UI_CALIBRATION_MENU_MODE = 200,
 
@@ -248,6 +258,17 @@ enum ParamId : uint16_t {
   // the Screen's screen_cal_topology() (screen_target.h) tracks the synth
   // it's attached to without a per-project build flag.
   PARAM_UI_VOICE_TOPOLOGY        = 157,
+
+  // 158: manual calibration step: 0 = trimpot stage at the low starting note
+  // (default on manual-cal entry), 1 = 440 Hz amp-set stage (adjust
+  // PARAM_AMP_COMP_440 until duty = 50%; the stored value anchors the
+  // FREQ_TRACE auto-calibration curve).
+  PARAM_MANUAL_CALIBRATION_STEP  = 158,
+
+  // 159: absolute range-PWM amp-comp value at 440 Hz for the oscillator
+  // selected by PARAM_MANUAL_CALIBRATION_STAGE (0..DIV_COUNTER, fits int16).
+  // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
+  PARAM_AMP_COMP_440             = 159,
 
   // --- Preset store / dump commands (DCO-local; tools/dco_control) -----
   // See preset_store.h for the record format and the '[dump]'/'[pdir]'/
