@@ -296,8 +296,8 @@ enum ParamId : uint16_t {
 
   // 159: absolute range-PWM amp-comp value at 440 Hz for the oscillator
   // selected by PARAM_MANUAL_CALIBRATION_STAGE (osc = stage / 3). Range
-  // AMP_COMP_440_MIN..MAX (700..2800), fits int16. Persisted together with
-  // the offsets by PARAM_MANUAL_CALIBRATION_STORE.
+  // AMP_COMP_440_MIN..MAX (RANGE_PWM_WRAP × 0.05 .. 0.2), fits int16.
+  // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
   PARAM_AMP_COMP_440             = 159,
 
   // 161: per-oscillator duty target trim, in hundredths of a percent of duty
@@ -355,9 +355,19 @@ enum ParamId : uint16_t {
 #ifndef CAL_STAGES_PER_OSC
 #define CAL_STAGES_PER_OSC 3
 #endif
+#if defined(__has_include)
+#  if __has_include("project_config.h")
+#    include "project_config.h"
+#  endif
+#endif
 #ifndef AMP_COMP_440_MIN
+#ifdef RANGE_PWM_WRAP
+#define AMP_COMP_440_MIN (RANGE_PWM_WRAP / 20)
+#define AMP_COMP_440_MAX (RANGE_PWM_WRAP / 5)
+#else
 #define AMP_COMP_440_MIN 700
 #define AMP_COMP_440_MAX 2800
+#endif
 #endif
 #ifndef CAL_PW_CENTER_MAX
 #define CAL_PW_CENTER_MAX 1023  // DIV_COUNTER_PW - 1
