@@ -8,7 +8,7 @@
 // DCO-PROTOCOL library, so there is nothing to copy and nothing to drift.
 // It is the union of both synths' parameters: a board simply has no handler for
 // the IDs it does not implement (e.g. the sub-oscillator block 90–99 is
-// DCO3-only, and 170–173 are handled by the DCO alone). Keeping one enum means a
+// DCO3-only, and 170–174 are handled by the DCO alone). Keeping one enum means a
 // given number always means the same thing on every wire in both instruments.
 //
 // IMPORTANT:
@@ -266,6 +266,9 @@ enum ParamId : uint16_t {
   // previous values of whatever stage was interrupted).
   PARAM_CALIBRATION_FLAG         = 150,
   PARAM_MANUAL_CALIBRATION_FLAG  = 151,
+  // 152: manual-cal walk. DCO3: 0..8 (3 osc × saw/pulse/440). DCO4: 0..27
+  // packed per voice pair (A: saw/tri/pulse-PW/440, B: saw/pulse/440).
+  // Do not treat stage as an oscillator index. See cal_stage_*_n().
   PARAM_MANUAL_CALIBRATION_STAGE = 152,
   PARAM_MANUAL_CALIBRATION_OFFSET= 153,
 
@@ -285,15 +288,16 @@ enum ParamId : uint16_t {
   // it's attached to without a per-project build flag.
   PARAM_UI_VOICE_TOPOLOGY        = 157,
 
-  // 158: manual calibration step: 0 = trimpot stage at the low starting note
-  // (default on manual-cal entry), 1 = 440 Hz amp-set stage (adjust
-  // PARAM_AMP_COMP_440 until duty = 50%; the stored value anchors the
-  // FREQ_TRACE auto-calibration curve).
+  // 158: optional override for the 440 Hz amp-set stage (PC panel). Input
+  // derives this from PARAM_MANUAL_CALIBRATION_STAGE (440 kind). 0 = trim
+  // at the low starting note, 1 = 440 Hz (adjust PARAM_AMP_COMP_440 until
+  // duty = 50%; the stored value anchors the FREQ_TRACE curve).
   PARAM_MANUAL_CALIBRATION_STEP  = 158,
 
   // 159: absolute range-PWM amp-comp value at 440 Hz for the oscillator
-  // selected by PARAM_MANUAL_CALIBRATION_STAGE (0..DIV_COUNTER, fits int16).
-  // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
+  // selected by PARAM_MANUAL_CALIBRATION_STAGE (osc = stage / 3). Range
+  // AMP_COMP_440_MIN..MAX (700..2800), fits int16. Persisted together with
+  // the offsets by PARAM_MANUAL_CALIBRATION_STORE.
   PARAM_AMP_COMP_440             = 159,
 
   // 161: per-oscillator duty target trim, in hundredths of a percent of duty
@@ -305,6 +309,10 @@ enum ParamId : uint16_t {
   // Persisted together with the offsets by PARAM_MANUAL_CALIBRATION_STORE.
   PARAM_AMP_COMP_DUTY_OFFSET     = 161,
 
+  // 162: DCO4 A-oscillator pulse-PW substage. Encoder sets PW_CENTER for
+  // that voice's PW channel (0..CAL_PW_CENTER_MAX). Persisted by STORE.
+  PARAM_CAL_PW_CENTER            = 162,
+
   // --- Preset store / dump commands (DCO-local; tools/dco_control) -----
   // See preset_store.h for the record format and the '[dump]'/'[pdir]'/
   // '[preset]'/'[bulk]' text protocol on USB CDC.
@@ -312,6 +320,8 @@ enum ParamId : uint16_t {
   PARAM_PRESET_LOAD              = 171,  // value = slot 0..255: recall slot
   PARAM_PRESET_DUMP              = 172,  // -1 = directory, 0..255 = slot record hex
   PARAM_CAL_DUMP                 = 173,  // 0/-1 = all cal tables, 1..5 = one (CAL_DUMP_*)
+  // Host / panel: push Screen slot+name from DCO presetName[] without LittleFS recall.
+  PARAM_UI_PRESET_SCROLL         = 174,  // value = slot 0..255: 17-byte Screen 'q' + PresetScroll
 
   // 160: bench / debug trigger (DCO-local; dco_control Diagnostics + Calibration + Character).
   // 1 = PIO topology report, 2 = period probe at a low divider,
@@ -324,12 +334,117 @@ enum ParamId : uint16_t {
   // 30 = force-seed fake amp-comp + PW tables.
   // 32–33 clkdiv GOLD_REF / GOLD_LIVE / FLOAT_LIVE / Q16 / Q8 / FAST_Q4
   // (both voice engines; RUNNING_AVERAGE). 2=Q16 shipping, 3=Q8 A/B.
+  // 43 = MCP4728 presence report (0x63/0x64/0x65). Diagnostic only — does not
+  // gate live DAC writes. 44 = re-attach all three, then rewrite levels.
+  // DCO3: handled on the DCO when ENABLE_MCP4728; else prints compiled-out.
+  // DCO4: DCO forwards 43/44/45 over Serial2; Mainboard executes (same path as 42).
+  // 45 = Mainboard profiler dump once (40/41 are amp-0 on the DCO, so they are
+  // not forwarded; Mainboard still accepts 40 locally as dump).
+  // 46 = PW CV probe: sweeps every PW channel and prints the duty each level
+  // produces on the soloed oscillator, so a dead or mis-mapped PW CV is one
+  // command. Needs manual calibration running. See CALIBRATION_PROCEDURE.md.
   // 200–50000 = set pioPulseLength (reset pulse Y cycles); unsigned 16-bit on wire.
   // Also reloads running SMs via pio_defer_request_reset_pulse_all().
   // Packed Character jitter setters (unsigned 16-bit, hi|lo, lo = 0..128):
   //   0xC8xx ampCompJitter, 0xCAxx pitchJitter, 0xCBxx pulsewidthJitter.
   PARAM_DEBUG_COMMAND            = 160
 };
+
+// Manual-cal stage walk. nOsc <= 3: uniform 3 (saw, pulse, 440).
+// Else (DCO4): packed 7 per voice pair — A saw/tri/pulse-PW/440, B saw/pulse/440.
+#ifndef CAL_STAGES_PER_OSC
+#define CAL_STAGES_PER_OSC 3
+#endif
+#ifndef AMP_COMP_440_MIN
+#define AMP_COMP_440_MIN 700
+#define AMP_COMP_440_MAX 2800
+#endif
+#ifndef CAL_PW_CENTER_MAX
+#define CAL_PW_CENTER_MAX 1023  // DIV_COUNTER_PW - 1
+#endif
+
+enum CalStageKind : uint8_t {
+  CAL_KIND_SAW = 0,
+  CAL_KIND_TRI,
+  CAL_KIND_PULSE,
+  CAL_KIND_PULSE_PW,
+  CAL_KIND_440
+};
+
+static inline uint8_t cal_stage_count_n(uint8_t nOsc) {
+  if (nOsc <= 3) return (uint8_t)(nOsc * 3u);
+  return (uint8_t)((nOsc / 2u) * 7u);
+}
+
+static inline uint8_t cal_stage_max_n(uint8_t nOsc) {
+  const uint8_t n = cal_stage_count_n(nOsc);
+  return (n == 0) ? 0 : (uint8_t)(n - 1u);
+}
+
+static inline uint8_t cal_stage_to_osc_n(uint8_t stage, uint8_t nOsc) {
+  if (nOsc == 0) return 0;
+  if (nOsc <= 3) {
+    uint8_t osc = (uint8_t)(stage / 3u);
+    return (osc >= nOsc) ? (uint8_t)(nOsc - 1u) : osc;
+  }
+  uint8_t voice = 0;
+  uint8_t remain = stage;
+  const uint8_t nVoice = (uint8_t)(nOsc / 2u);
+  while (remain >= 7u && (uint8_t)(voice + 1u) < nVoice) {
+    remain = (uint8_t)(remain - 7u);
+    voice++;
+  }
+  if (remain < 4u) return (uint8_t)(voice * 2u);
+  uint8_t osc = (uint8_t)(voice * 2u + 1u);
+  return (osc >= nOsc) ? (uint8_t)(nOsc - 1u) : osc;
+}
+
+static inline CalStageKind cal_stage_kind_n(uint8_t stage, uint8_t nOsc) {
+  if (nOsc <= 3) {
+    switch (stage % 3u) {
+      case 1:  return CAL_KIND_PULSE;
+      case 2:  return CAL_KIND_440;
+      default: return CAL_KIND_SAW;
+    }
+  }
+  uint8_t remain = stage;
+  const uint8_t nVoice = (uint8_t)(nOsc / 2u);
+  uint8_t voice = 0;
+  while (remain >= 7u && (uint8_t)(voice + 1u) < nVoice) {
+    remain = (uint8_t)(remain - 7u);
+    voice++;
+  }
+  if (remain < 4u) {
+    switch (remain) {
+      case 1:  return CAL_KIND_TRI;
+      case 2:  return CAL_KIND_PULSE_PW;
+      case 3:  return CAL_KIND_440;
+      default: return CAL_KIND_SAW;
+    }
+  }
+  switch ((uint8_t)(remain - 4u)) {
+    case 1:  return CAL_KIND_PULSE;
+    case 2:  return CAL_KIND_440;
+    default: return CAL_KIND_SAW;
+  }
+}
+
+static inline bool cal_stage_is_440_n(uint8_t stage, uint8_t nOsc) {
+  return cal_stage_kind_n(stage, nOsc) == CAL_KIND_440;
+}
+static inline bool cal_stage_is_saw_n(uint8_t stage, uint8_t nOsc) {
+  return cal_stage_kind_n(stage, nOsc) == CAL_KIND_SAW;
+}
+static inline bool cal_stage_is_tri_n(uint8_t stage, uint8_t nOsc) {
+  return cal_stage_kind_n(stage, nOsc) == CAL_KIND_TRI;
+}
+static inline bool cal_stage_is_pw_edit_n(uint8_t stage, uint8_t nOsc) {
+  return cal_stage_kind_n(stage, nOsc) == CAL_KIND_PULSE_PW;
+}
+static inline bool cal_stage_is_square_n(uint8_t stage, uint8_t nOsc) {
+  const CalStageKind k = cal_stage_kind_n(stage, nOsc);
+  return k == CAL_KIND_PULSE || k == CAL_KIND_PULSE_PW || k == CAL_KIND_440;
+}
 
 #endif  // PARAMS_DEF_H
 
