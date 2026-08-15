@@ -16,16 +16,6 @@
 // 512 bytes ping-pong buffer provides plenty of headroom for bursts
 static constexpr uint16_t SERIAL_DMA_BUF_SIZE = 512;
 
-struct UartDmaTx {
-  uint8_t id;
-  // Non-blocking fast write (used for live streams, <1us)
-  size_t write(const uint8_t *p, size_t n);
-  // Blocking write (used only for preset dumps and critical signals)
-  size_t write_blocking(const uint8_t *p, size_t n, uint32_t timeout_ms = 2);
-  // Available space in current write buffer
-  size_t availableForWrite();
-};
-
 struct SerialDmaEngine {
 #if defined(ARDUINO_ARCH_RP2040)
   uart_inst_t *uart;
@@ -43,25 +33,10 @@ struct SerialDmaEngine {
   bool sending;
 };
 
-extern SerialDmaEngine serial_dma_eng[3];
+// Universal inline global instance across all translation units
+inline SerialDmaEngine serial_dma_eng[3] = {};
 
-void serial_dma_poll_one(uint8_t i);
-void serial_dma_poll_all(uint8_t active_engines);
-
-#if defined(ARDUINO_ARCH_RP2040)
-  void serial_dma_init_rp2040(uint8_t id, uart_inst_t *uart);
-#elif defined(ARDUINO_ARCH_STM32)
-  void serial_dma_init_stm32(uint8_t id, USART_TypeDef *uart, DMA_Stream_TypeDef *stream, uint32_t request);
-#endif
-
-// =============================================================================
-// Implementation
-// =============================================================================
-#ifdef DCO_PROTOCOL_IMPLEMENT_DMA
-
-SerialDmaEngine serial_dma_eng[3];
-
-void serial_dma_poll_one(uint8_t i) {
+inline void serial_dma_poll_one(uint8_t i) {
   SerialDmaEngine &e = serial_dma_eng[i];
   if (!e.uart) return;
 
@@ -112,81 +87,81 @@ void serial_dma_poll_one(uint8_t i) {
 #endif
 }
 
-// FAST NON-BLOCKING WRITE: < 1 microsecond execution time!
-size_t UartDmaTx::write(const uint8_t *p, size_t n) {
-  if (id >= 3 || n == 0 || n > SERIAL_DMA_BUF_SIZE || !p) return 0;
-  SerialDmaEngine &e = serial_dma_eng[id];
-  if (!e.uart) return 0;
+struct UartDmaTx {
+  uint8_t id;
 
-#if defined(ARDUINO_ARCH_RP2040)
-  mutex_enter_blocking(&e.mutex);
-#endif
+  inline size_t write(const uint8_t *p, size_t n) {
+    if (id >= 3 || n == 0 || n > SERIAL_DMA_BUF_SIZE || !p) return 0;
+    SerialDmaEngine &e = serial_dma_eng[id];
+    if (!e.uart) return 0;
 
-  serial_dma_poll_one(id);
-  
-  // Fast path: room in current fill buffer
-  if ((size_t)e.len[e.fill] + n <= SERIAL_DMA_BUF_SIZE) {
-    memcpy(e.buf[e.fill] + e.len[e.fill], p, n);
-    e.len[e.fill] += n;
+  #if defined(ARDUINO_ARCH_RP2040)
+    mutex_enter_blocking(&e.mutex);
+  #endif
+
     serial_dma_poll_one(id);
-#if defined(ARDUINO_ARCH_RP2040)
-    mutex_exit(&e.mutex);
-#endif
-    return n;
-  }
+    
+    // Fast path: room in current fill buffer
+    if ((size_t)e.len[e.fill] + n <= SERIAL_DMA_BUF_SIZE) {
+      memcpy(e.buf[e.fill] + e.len[e.fill], p, n);
+      e.len[e.fill] += n;
+      serial_dma_poll_one(id);
+  #if defined(ARDUINO_ARCH_RP2040)
+      mutex_exit(&e.mutex);
+  #endif
+      return n;
+    }
 
-  // Second chance: poll once more to see if active DMA just completed
-  serial_dma_poll_one(id);
-  if ((size_t)e.len[e.fill] + n <= SERIAL_DMA_BUF_SIZE) {
-    memcpy(e.buf[e.fill] + e.len[e.fill], p, n);
-    e.len[e.fill] += n;
+    // Second chance: poll once more to see if active DMA just completed
     serial_dma_poll_one(id);
-#if defined(ARDUINO_ARCH_RP2040)
+    if ((size_t)e.len[e.fill] + n <= SERIAL_DMA_BUF_SIZE) {
+      memcpy(e.buf[e.fill] + e.len[e.fill], p, n);
+      e.len[e.fill] += n;
+      serial_dma_poll_one(id);
+  #if defined(ARDUINO_ARCH_RP2040)
+      mutex_exit(&e.mutex);
+  #endif
+      return n;
+    }
+
+  #if defined(ARDUINO_ARCH_RP2040)
     mutex_exit(&e.mutex);
-#endif
-    return n;
+  #endif
+
+    return 0;
   }
 
-#if defined(ARDUINO_ARCH_RP2040)
-  mutex_exit(&e.mutex);
-#endif
-
-  // Non-blocking: returns immediately without stalling the loop!
-  return 0;
-}
-
-// Blocking version for presets and critical signals only
-size_t UartDmaTx::write_blocking(const uint8_t *p, size_t n, uint32_t timeout_ms) {
-  uint32_t start = millis();
-  while ((millis() - start) <= timeout_ms) {
-    size_t written = write(p, n);
-    if (written == n) return n;
+  inline size_t write_blocking(const uint8_t *p, size_t n, uint32_t timeout_ms = 2) {
+    uint32_t start = millis();
+    while ((millis() - start) <= timeout_ms) {
+      size_t written = write(p, n);
+      if (written == n) return n;
+    }
+    return 0;
   }
-  return 0;
-}
 
-// Check available buffer capacity without blocking
-size_t UartDmaTx::availableForWrite() {
-  if (id >= 3) return 0;
-  SerialDmaEngine &e = serial_dma_eng[id];
-  if (!e.uart) return 0;
+  inline size_t availableForWrite() {
+    if (id >= 3) return 0;
+    SerialDmaEngine &e = serial_dma_eng[id];
+    if (!e.uart) return 0;
 
-#if defined(ARDUINO_ARCH_RP2040)
-  mutex_enter_blocking(&e.mutex);
-#endif
+  #if defined(ARDUINO_ARCH_RP2040)
+    mutex_enter_blocking(&e.mutex);
+  #endif
 
-  serial_dma_poll_one(id);
-  size_t avail = (size_t)(SERIAL_DMA_BUF_SIZE - e.len[e.fill]);
+    serial_dma_poll_one(id);
+    size_t avail = (size_t)(SERIAL_DMA_BUF_SIZE - e.len[e.fill]);
 
-#if defined(ARDUINO_ARCH_RP2040)
-  mutex_exit(&e.mutex);
-#endif
+  #if defined(ARDUINO_ARCH_RP2040)
+    mutex_exit(&e.mutex);
+  #endif
 
-  return avail;
-}
+    return avail;
+  }
+};
 
 #if defined(ARDUINO_ARCH_RP2040)
-void serial_dma_init_rp2040(uint8_t id, uart_inst_t *uart) {
+inline void serial_dma_init_rp2040(uint8_t id, uart_inst_t *uart) {
   SerialDmaEngine &e = serial_dma_eng[id];
   mutex_init(&e.mutex);
   e.uart = uart;
@@ -200,7 +175,7 @@ void serial_dma_init_rp2040(uint8_t id, uart_inst_t *uart) {
   e.len[0] = e.len[1] = e.fill = 0; e.sending = false;
 }
 #elif defined(ARDUINO_ARCH_STM32)
-void serial_dma_init_stm32(uint8_t id, USART_TypeDef *uart, DMA_Stream_TypeDef *stream, uint32_t request) {
+inline void serial_dma_init_stm32(uint8_t id, USART_TypeDef *uart, DMA_Stream_TypeDef *stream, uint32_t request) {
   SerialDmaEngine &e = serial_dma_eng[id];
   if (!uart || !stream) return;
   memset(&e.hdma, 0, sizeof(e.hdma));
@@ -227,5 +202,4 @@ void serial_dma_init_stm32(uint8_t id, USART_TypeDef *uart, DMA_Stream_TypeDef *
 }
 #endif
 
-#endif // DCO_PROTOCOL_IMPLEMENT_DMA
 #endif // SERIAL_DMA_TX_H
