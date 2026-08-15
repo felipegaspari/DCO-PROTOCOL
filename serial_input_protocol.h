@@ -3,109 +3,130 @@
 
 #include <stdint.h>
 
-// -----------------------------------------------------------------------------
-// DCO ↔ Input (and USB bench) inner protocol: command bytes + payload sizes.
-//
-// Inner frame (what handlers see; unchanged under RAW vs COBS):
-//
-//   [1 byte] command
-//   [N bytes] payload (little-endian multi-byte fields)
-//
-// On-wire default: identical to the inner frame (SERIAL_FRAMING_RAW).
-// On-wire COBS (#define SERIAL_FRAMING_COBS): COBS(inner) + 0x00. See serial_frame.h.
-// Host A/B: dco_control --cobs / DCO_SERIAL_COBS=1.
-//
-// 0x00 is reserved as the COBS delimiter and is never a command.
-//
-// Every board compiles this same file, so it lists every command on every link.
-// A board only *acts* on the ones it registers in its own SerialCommandDef[]
-// table (see Serial.ino); an unregistered command is dropped by the parser.
-// -----------------------------------------------------------------------------
-
-// Boards that pin the serial hot path in SRAM define this before including
-// (see the Input board's sram_hot.h). Everywhere else it expands to nothing.
-// Defined here because this is the root of the protocol header include chain:
-// serial_frame.h and serial_param_protocol.h include it, serial_parser.h
-// reaches it through serial_frame.h.
 #ifndef INPUT_ALWAYS_INLINE
 #define INPUT_ALWAYS_INLINE
 #endif
 
-enum InputSerialCmd : uint8_t {
-  INPUT_CMD_ADSR1_BLOCK  = 'a',  // EnvVCA times
-  INPUT_CMD_ADSR2_BLOCK  = 'b',  // EnvVCF times
-  INPUT_CMD_ADSR3_BLOCK  = 'c',  // EnvDCO times (maps to ADSR1_* on DCO)
-  INPUT_CMD_FILTER_BLOCK = 'd',
-  INPUT_CMD_PARAM_16     = 'p',  // id + int16 LE (Input→DCO + DCO→Input persistable mirror)
-  INPUT_CMD_PRESET_NAME  = 'q',  // 16 ASCII chars
-  INPUT_CMD_PARAM_32     = 'x',  // id + u32 LE (gap 154 / cal 155 DCO→Input)
-  INPUT_CMD_BULK_CHUNK   = 'B',  // host→DCO staged restore chunk (preset_store.h)
-  INPUT_CMD_BULK_COMMIT  = 'C',  // host→DCO verify + persist staged bytes
-  INPUT_CMD_PRESET_DIR_REQUEST = 'N',  // Input→DCO: send the whole preset directory
-  INPUT_CMD_PRESET_DIR_ENTRY   = 'O',  // DCO→Input only: one [slot][name:16] entry
-  INPUT_CMD_PRESET_LOADED      = 'L',  // DCO→Input only: [slot] just finished loading
+// Universal Command Set
+enum SharedSerialCmd : uint8_t {
+  CMD_ADSR1_BLOCK        = 'a',
+  CMD_ADSR2_BLOCK        = 'b',
+  CMD_ADSR3_BLOCK        = 'c',
+  CMD_FILTER_BLOCK       = 'd',
+  CMD_PARAM_16           = 'p',
+  CMD_PRESET_NAME        = 'q',
+  CMD_PARAM_32           = 'x',
+  CMD_BULK_CHUNK         = 'B',
+  CMD_BULK_COMMIT        = 'C',
+  CMD_PRESET_DIR_REQUEST = 'N',
+  CMD_PRESET_DIR_ENTRY   = 'O',
+  CMD_PRESET_LOADED      = 'L',
+  CMD_NOTE_ON            = 'n',
+  CMD_NOTE_OFF           = 'o',
+  CMD_EXPRESSION         = 'e',
+  CMD_MOD_STREAM         = 'm',
+  CMD_BENCH_TEXT         = 't',
+  CMD_SCREEN_SIGNAL      = 's',
+  CMD_PARAM_8            = 'w',
+  CMD_PARAM_NAV_BYTE     = 'y',
+  CMD_CHAR_SELECT        = 'c',
+  CMD_BLOCK_OSC          = 'v', // Voice / Oscillator Block (22 B)
+  CMD_BLOCK_LFO          = 'l', // LFO & Modulation Block (33 B)
+  CMD_BLOCK_MOD          = 'M',  // Mod Matrix Block (32 B)
 };
 
-// Payload sizes (NOT counting the command byte).
-//
-// ADSR ('a'/'b'/'c'): A, D, S, R as uint16 LE.
-//   A/D/R are exp-mapped 0..25000; S is linear 0..4095.
-static constexpr uint8_t INPUT_SERIAL_LEN_ADSR_BLOCK   = 8;
+// Screen signal values
+static constexpr uint8_t SCREEN_SIGNAL_PRESET_SCROLL = 1;
+static constexpr uint8_t SCREEN_SIGNAL_SILENT        = 6;
 
-// Filter ('d'): CUTOFF, RESONANCE, ADSR2toVCF, LFO2toVCF as uint16 LE.
-static constexpr uint8_t INPUT_SERIAL_LEN_FILTER_BLOCK = 8;
+// Payload sizes
+static constexpr uint8_t SERIAL_LEN_ADSR_BLOCK           = 8;
+static constexpr uint8_t SERIAL_LEN_FILTER_BLOCK         = 8;
+static constexpr uint8_t SERIAL_LEN_PARAM_16             = 3;
+static constexpr uint8_t SERIAL_LEN_PRESET_NAME          = 16;
+static constexpr uint8_t SERIAL_LEN_PARAM_32             = 5;
+static constexpr uint8_t SERIAL_LEN_BULK_CHUNK           = 36;
+static constexpr uint8_t SERIAL_LEN_BULK_COMMIT          = 8;
+static constexpr uint8_t SERIAL_LEN_PRESET_DIR_REQUEST   = 1;
+static constexpr uint8_t SERIAL_LEN_PRESET_DIR_ENTRY     = 17;
+static constexpr uint8_t SERIAL_LEN_PRESET_LOADED        = 1;
+static constexpr uint8_t SERIAL_LEN_NOTE_ON              = 4;
+static constexpr uint8_t SERIAL_LEN_NOTE_OFF             = 1;
+static constexpr uint8_t SERIAL_LEN_EXPRESSION           = 4;
+static constexpr uint8_t SERIAL_LEN_MOD_STREAM           = 16;
+static constexpr uint8_t SERIAL_LEN_BENCH_TEXT           = 16;
+static constexpr uint8_t SERIAL_LEN_SCREEN_SIGNAL        = 1;
+static constexpr uint8_t SERIAL_LEN_SCREEN_PRESET_SCROLL = 17;
+static constexpr uint8_t SERIAL_LEN_PARAM_8              = 2;
+static constexpr uint8_t SERIAL_LEN_PARAM_NAV_BYTE       = 2;
+static constexpr uint8_t SERIAL_LEN_CHAR_SELECT          = 1;
 
-// Param ('p'): [id:u8][value:i16 LE]
-static constexpr uint8_t INPUT_SERIAL_LEN_PARAM_16     = 3;
+static constexpr uint8_t NOTE_FLAG_RETRIGGER             = (1u << 0);
+static constexpr uint8_t NOTE_FLAG_PORTA_ONLY            = (1u << 1);
+static constexpr uint8_t SERIAL_BENCH_TEXT_DATA_MAX      = 15;
 
-// Preset name ('q'): 16 ASCII bytes (space-padded).
-//
-// Note for the Screen: the 'q' it receives is Input's *preset scroll*, which
-// prefixes the slot number, so Serial.ino there dispatches on its own
-// SCREEN_SERIAL1_LEN_PRESET_SCROLL (17). This constant is the panel-to-voice-side
-// 'q'.
-static constexpr uint8_t INPUT_SERIAL_LEN_PRESET_NAME  = 16;
+static constexpr uint8_t SERIAL_LEN_BLOCK_OSC = 22;
+static constexpr uint8_t SERIAL_LEN_BLOCK_LFO = 33;
+static constexpr uint8_t SERIAL_LEN_BLOCK_MOD = 32;
 
-// Param32 ('x'): [id:u8][value:u32 LE] — DCO→Input gap/cal; Input relays 154 to Screen.
-static constexpr uint8_t INPUT_SERIAL_LEN_PARAM_32     = 5;
+// Compatibility aliases for legacy code
+#define INPUT_CMD_PRESET_DIR_ENTRY   CMD_PRESET_DIR_ENTRY
+#define INPUT_SERIAL_LEN_BULK_CHUNK  SERIAL_LEN_BULK_CHUNK
+#define INPUT_SERIAL_LEN_BULK_COMMIT SERIAL_LEN_BULK_COMMIT
 
-// Bulk chunk ('B'): [target:u8][slot:u8][offset:u16 LE][32 data bytes].
-static constexpr uint8_t INPUT_SERIAL_LEN_BULK_CHUNK   = 36;
+#pragma pack(push, 1)
+struct PatchOscBlock {
+  uint16_t wave_enables;
+  int8_t   osc1_interval;
+  int8_t   osc2_interval;
+  int8_t   osc3_interval;
+  uint16_t osc2_detune;
+  int16_t  unison_detune;
+  uint8_t  voice_mode;
+  uint8_t  voice_alloc_mode;
+  uint8_t  sync_mode;
+  uint8_t  soft_sync;
+  uint8_t  subosc_divide;
+  int8_t   analog_drift;
+  int16_t  analog_drift_speed;
+  int8_t   analog_drift_spread;
+  uint16_t portamento_time;
+  uint8_t  portamento_mode;
+  uint8_t  character;
+};
 
-// Bulk commit ('C'): [target:u8][slot:u8][size:u16 LE][crc32:u32 LE].
-static constexpr uint8_t INPUT_SERIAL_LEN_BULK_COMMIT  = 8;
+struct PatchLfoBlock {
+  uint8_t  lfo1_waveform;
+  uint8_t  lfo2_waveform;
+  uint16_t lfo1_speed;
+  uint16_t lfo2_speed;
+  uint16_t lfo1_to_dco;
+  uint8_t  lfo1_to_osc1;
+  uint8_t  lfo1_to_osc2;
+  uint8_t  lfo1_to_osc3;
+  uint16_t lfo2_to_osc2;
+  uint16_t lfo2_to_osc3;
+  uint16_t lfo2_to_osc2_coarse;
+  uint16_t lfo2_to_osc3_coarse;
+  uint16_t lfo2_to_pw;
+  uint16_t lfo1_to_vca;
+  uint16_t pw_value;
+  int16_t  adsr1_to_vca;
+  int16_t  adsr3_to_pwm;
+  int16_t  adsr3_to_detune1;
+  uint8_t  adsr3_pitch_mode;
+  int8_t   adsr3_to_osc_select;
+};
 
-// Preset directory request ('N'): Input→DCO, 1 unused/padding byte.
-// (payload_len==0 is indistinguishable from "unregistered command" in
-// serial_parser_dispatch()/process_byte(), so a true 0-byte frame can't be
-// used here even though the byte itself carries no information.)
-static constexpr uint8_t INPUT_SERIAL_LEN_PRESET_DIR_REQUEST = 1;
+struct ModSlotPacked {
+  uint8_t src;
+  uint8_t dest;
+  int16_t depth;
+};
 
-// Preset directory entry ('O'): DCO→Input only. [slot:u8][name:16 ASCII].
-static constexpr uint8_t INPUT_SERIAL_LEN_PRESET_DIR_ENTRY   = 17;
-
-// Preset loaded notice ('L'): DCO→Input only. [slot:u8].
-static constexpr uint8_t INPUT_SERIAL_LEN_PRESET_LOADED      = 1;
-
-// Reference map of every command to its payload length. Boards do not parse
-// through this: each one lists the subset it handles in its own
-// SerialCommandDef[] table, which is what the parser LUT is built from.
-static inline INPUT_ALWAYS_INLINE uint8_t serial_input_payload_len(uint8_t cmd) {
-  switch (cmd) {
-    case INPUT_CMD_ADSR1_BLOCK:
-    case INPUT_CMD_ADSR2_BLOCK:
-    case INPUT_CMD_ADSR3_BLOCK:  return INPUT_SERIAL_LEN_ADSR_BLOCK;
-    case INPUT_CMD_FILTER_BLOCK: return INPUT_SERIAL_LEN_FILTER_BLOCK;
-    case INPUT_CMD_PARAM_16:     return INPUT_SERIAL_LEN_PARAM_16;
-    case INPUT_CMD_PRESET_NAME:  return INPUT_SERIAL_LEN_PRESET_NAME;
-    case INPUT_CMD_PARAM_32:     return INPUT_SERIAL_LEN_PARAM_32;
-    case INPUT_CMD_BULK_CHUNK:   return INPUT_SERIAL_LEN_BULK_CHUNK;
-    case INPUT_CMD_BULK_COMMIT:  return INPUT_SERIAL_LEN_BULK_COMMIT;
-    case INPUT_CMD_PRESET_DIR_REQUEST: return INPUT_SERIAL_LEN_PRESET_DIR_REQUEST;
-    case INPUT_CMD_PRESET_DIR_ENTRY:   return INPUT_SERIAL_LEN_PRESET_DIR_ENTRY;
-    case INPUT_CMD_PRESET_LOADED:      return INPUT_SERIAL_LEN_PRESET_LOADED;
-    default:                     return 0;
-  }
-}
+struct PatchModBlock {
+  ModSlotPacked slots[8];
+};
+#pragma pack(pop)
 
 #endif // SERIAL_INPUT_PROTOCOL_H

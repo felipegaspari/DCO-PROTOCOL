@@ -6,17 +6,6 @@
 #include <string.h>
 #include "params_def.h"
 
-// Generic parameter routing helper.
-//
-// Each MCU defines a ParamDescriptorT<ValueT> table where:
-//   - id    is a ParamId from params_def.h
-//   - apply is a function that takes the decoded parameter value
-//
-// Two dispatch strategies live here; a board uses whichever it wired up.
-// The DCO and Mainboard build a 256-entry jump table once (wire ParamId is
-// uint8) and dispatch O(1); Input and Screen use the linear scan below.
-// Adding a parameter is still: new ParamId + apply_param_* + one table row.
-
 template<typename ValueT>
 struct ParamDescriptorT {
   ParamId id;
@@ -25,6 +14,7 @@ struct ParamDescriptorT {
 
 static constexpr uint16_t PARAM_ROUTER_JUMP_SIZE = 256;
 
+// 1. Build Jump Table (DCO, Mainboard, Input)
 template<typename ValueT>
 inline void param_router_build_jump(
     void (*(&jump)[PARAM_ROUTER_JUMP_SIZE])(ValueT),
@@ -40,8 +30,9 @@ inline void param_router_build_jump(
   }
 }
 
+// 2. O(1) Jump Table Dispatch (3 arguments)
 template<typename ValueT>
-inline void param_router_apply_jump(
+inline void param_router_apply(
     void (*const (&jump)[PARAM_ROUTER_JUMP_SIZE])(ValueT),
     uint16_t rawId,
     ValueT value)
@@ -51,7 +42,17 @@ inline void param_router_apply_jump(
   }
 }
 
-// Linear scan (used by Input and Screen, whose tables are short).
+// Backward compatibility alias for jump apply
+template<typename ValueT>
+inline void param_router_apply_jump(
+    void (*const (&jump)[PARAM_ROUTER_JUMP_SIZE])(ValueT),
+    uint16_t rawId,
+    ValueT value)
+{
+  param_router_apply(jump, rawId, value);
+}
+
+// 3. Linear Scan Dispatch (4 arguments, used by Screen Controller)
 template<typename ValueT>
 inline void param_router_apply(
     const ParamDescriptorT<ValueT>* table,
@@ -68,8 +69,7 @@ inline void param_router_apply(
   }
 }
 
-// Defined by the boards that build a jump table (DCO, Mainboard); the others
-// simply never call it.
 void init_param_router();
+void update_parameters(uint8_t id, int16_t value);
 
-#endif  // PARAM_ROUTER_H
+#endif // PARAM_ROUTER_H
