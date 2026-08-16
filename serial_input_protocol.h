@@ -7,6 +7,13 @@
 #define INPUT_ALWAYS_INLINE
 #endif
 
+// =============================================================================
+// Canonical System Dimensions (Single Source of Truth for all MCUs)
+// =============================================================================
+static constexpr uint16_t PRESET_NUM_SLOTS = 256;  // Total presets in RAM / LittleFS
+static constexpr uint8_t  PRESET_NAME_LEN  = 16;   // ASCII characters per preset name
+static constexpr uint8_t  MOD_SLOT_COUNT   = 8;    // Modulation matrix slots
+
 // Universal Command Set
 enum SharedSerialCmd : uint8_t {
   CMD_ADSR1_BLOCK        = 'a',
@@ -29,26 +36,26 @@ enum SharedSerialCmd : uint8_t {
   CMD_SCREEN_SIGNAL      = 's',
   CMD_PARAM_8            = 'w',
   CMD_PARAM_NAV_BYTE     = 'y',
-  CMD_CHAR_SELECT        = 'c',
-  CMD_BLOCK_OSC          = 'v', // Voice / Oscillator Block (22 B)
-  CMD_BLOCK_LFO          = 'l', // LFO & Modulation Block (33 B)
-  CMD_BLOCK_MOD          = 'M',  // Mod Matrix Block (32 B)
+  CMD_CHAR_SELECT        = 'k',
+  CMD_BLOCK_OSC          = 'v',
+  CMD_BLOCK_LFO          = 'l',
+  CMD_BLOCK_MOD          = 'M',
 };
 
 // Screen signal values
 static constexpr uint8_t SCREEN_SIGNAL_PRESET_SCROLL = 1;
 static constexpr uint8_t SCREEN_SIGNAL_SILENT        = 6;
 
-// Payload sizes
+// Payload sizes (derived directly from canonical dimensions)
 static constexpr uint8_t SERIAL_LEN_ADSR_BLOCK           = 8;
 static constexpr uint8_t SERIAL_LEN_FILTER_BLOCK         = 8;
 static constexpr uint8_t SERIAL_LEN_PARAM_16             = 3;
-static constexpr uint8_t SERIAL_LEN_PRESET_NAME          = 16;
+static constexpr uint8_t SERIAL_LEN_PRESET_NAME          = PRESET_NAME_LEN;                     // 16
 static constexpr uint8_t SERIAL_LEN_PARAM_32             = 5;
 static constexpr uint8_t SERIAL_LEN_BULK_CHUNK           = 36;
 static constexpr uint8_t SERIAL_LEN_BULK_COMMIT          = 8;
 static constexpr uint8_t SERIAL_LEN_PRESET_DIR_REQUEST   = 1;
-static constexpr uint8_t SERIAL_LEN_PRESET_DIR_ENTRY     = 17;
+static constexpr uint8_t SERIAL_LEN_PRESET_DIR_ENTRY     = (uint8_t)(1u + PRESET_NAME_LEN);     // 17: [slot:1][name:16]
 static constexpr uint8_t SERIAL_LEN_PRESET_LOADED        = 1;
 static constexpr uint8_t SERIAL_LEN_NOTE_ON              = 4;
 static constexpr uint8_t SERIAL_LEN_NOTE_OFF             = 1;
@@ -56,7 +63,7 @@ static constexpr uint8_t SERIAL_LEN_EXPRESSION           = 4;
 static constexpr uint8_t SERIAL_LEN_MOD_STREAM           = 16;
 static constexpr uint8_t SERIAL_LEN_BENCH_TEXT           = 16;
 static constexpr uint8_t SERIAL_LEN_SCREEN_SIGNAL        = 1;
-static constexpr uint8_t SERIAL_LEN_SCREEN_PRESET_SCROLL = 17;
+static constexpr uint8_t SERIAL_LEN_SCREEN_PRESET_SCROLL = (uint8_t)(1u + PRESET_NAME_LEN);     // 17: [slot:1][name:16]
 static constexpr uint8_t SERIAL_LEN_PARAM_8              = 2;
 static constexpr uint8_t SERIAL_LEN_PARAM_NAV_BYTE       = 2;
 static constexpr uint8_t SERIAL_LEN_CHAR_SELECT          = 1;
@@ -67,9 +74,9 @@ static constexpr uint8_t SERIAL_BENCH_TEXT_DATA_MAX      = 15;
 
 static constexpr uint8_t SERIAL_LEN_BLOCK_OSC = 22;
 static constexpr uint8_t SERIAL_LEN_BLOCK_LFO = 33;
-static constexpr uint8_t SERIAL_LEN_BLOCK_MOD = 32;
+static constexpr uint8_t SERIAL_LEN_BLOCK_MOD = (uint8_t)(MOD_SLOT_COUNT * 4u); // 32
 
-// Compatibility aliases for legacy code
+// Compatibility aliases
 #define INPUT_CMD_PRESET_DIR_ENTRY   CMD_PRESET_DIR_ENTRY
 #define INPUT_SERIAL_LEN_BULK_CHUNK  SERIAL_LEN_BULK_CHUNK
 #define INPUT_SERIAL_LEN_BULK_COMMIT SERIAL_LEN_BULK_COMMIT
@@ -125,7 +132,7 @@ struct ModSlotPacked {
 };
 
 struct PatchModBlock {
-  ModSlotPacked slots[8];
+  ModSlotPacked slots[MOD_SLOT_COUNT];
 };
 #pragma pack(pop)
 

@@ -8,7 +8,7 @@
 static constexpr uint8_t SERIAL_FRAME_DELIMITER = 0x00;
 
 #ifndef SERIAL_INNER_MAX_PAYLOAD
-#define SERIAL_INNER_MAX_PAYLOAD 8
+#define SERIAL_INNER_MAX_PAYLOAD 40  // Sized with headroom for all domain blocks (<= 40B)
 #endif
 
 static constexpr uint8_t SERIAL_STUFFED_MAX = (uint8_t)(1u + SERIAL_INNER_MAX_PAYLOAD + 2u);
@@ -28,7 +28,7 @@ static inline INPUT_ALWAYS_INLINE bool serial_inner_unpack(const uint8_t* inner,
   return true;
 }
 
-// --- 2. COBS ENCODE/DECODE (Always compiled, ready for future SPI) ---
+// --- 2. COBS ENCODE/DECODE ---
 static inline INPUT_ALWAYS_INLINE int serial_cobs_encode(const uint8_t* src, uint8_t src_len, uint8_t* dst, uint8_t dst_cap) {
   if (dst_cap < 1) return -1;
   uint8_t dst_len = 0, code_idx = 0, code = 1;
@@ -76,8 +76,6 @@ static inline INPUT_ALWAYS_INLINE int serial_cobs_decode(const uint8_t* src, uin
 }
 
 // --- 3. EXPLICIT PIPELINES ---
-
-// RAW Pipeline
 static inline INPUT_ALWAYS_INLINE int serial_frame_stuff_raw(uint8_t cmd, const uint8_t* payload, uint8_t payload_len, uint8_t* dst, uint8_t dst_cap) {
   uint8_t n = 1u + payload_len;
   if (n > dst_cap || payload_len > SERIAL_INNER_MAX_PAYLOAD) return -1;
@@ -91,7 +89,6 @@ static inline INPUT_ALWAYS_INLINE bool serial_frame_unstuff_raw(const uint8_t* w
   return true;
 }
 
-// COBS Pipeline
 static inline INPUT_ALWAYS_INLINE int serial_frame_stuff_cobs(uint8_t cmd, const uint8_t* payload, uint8_t payload_len, uint8_t* dst, uint8_t dst_cap) {
   if (payload_len > SERIAL_INNER_MAX_PAYLOAD || dst_cap < 2) return -1;
   uint8_t inner[1 + SERIAL_INNER_MAX_PAYLOAD];
@@ -117,7 +114,6 @@ static inline INPUT_ALWAYS_INLINE bool serial_frame_unstuff_cobs(const uint8_t* 
   return true;
 }
 
-// --- 4. ALIAS ASSIGNMENT ---
 #ifdef SERIAL_FRAMING_COBS
 #define serial_frame_stuff serial_frame_stuff_cobs
 #define serial_frame_unstuff serial_frame_unstuff_cobs
@@ -126,7 +122,6 @@ static inline INPUT_ALWAYS_INLINE bool serial_frame_unstuff_cobs(const uint8_t* 
 #define serial_frame_unstuff serial_frame_unstuff_raw
 #endif
 
-// Generic Sender
 template<typename StreamT>
 static inline INPUT_ALWAYS_INLINE void serial_frame_write(StreamT& stream, uint8_t cmd, const uint8_t* payload, uint8_t payload_len) {
   uint8_t buf[SERIAL_STUFFED_MAX];
