@@ -1,6 +1,14 @@
 #ifndef SERIAL_PARSER_H
 #define SERIAL_PARSER_H
 
+#ifndef INPUT_ALWAYS_INLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define INPUT_ALWAYS_INLINE __attribute__((always_inline))
+#else
+#define INPUT_ALWAYS_INLINE
+#endif
+#endif
+
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>

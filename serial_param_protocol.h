@@ -4,6 +4,14 @@
 #include <stdint.h>
 #include "serial_input_protocol.h"
 
+#ifndef INPUT_ALWAYS_INLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define INPUT_ALWAYS_INLINE __attribute__((always_inline))
+#else
+#define INPUT_ALWAYS_INLINE
+#endif
+#endif
+
 struct ParamFrame {
   uint8_t id;
   int32_t value;

@@ -4,7 +4,11 @@
 #include <stdint.h>
 
 #ifndef INPUT_ALWAYS_INLINE
+#if defined(__GNUC__) || defined(__clang__)
+#define INPUT_ALWAYS_INLINE __attribute__((always_inline))
+#else
 #define INPUT_ALWAYS_INLINE
+#endif
 #endif
 
 // =============================================================================
