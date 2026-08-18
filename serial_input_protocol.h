@@ -44,11 +44,31 @@ enum SharedSerialCmd : uint8_t {
   CMD_BLOCK_OSC          = 'v',
   CMD_BLOCK_LFO          = 'l',
   CMD_BLOCK_MOD          = 'M',
+  CMD_BLOCK_MIX          = 'Q'
 };
 
+// ===============================================================0
+// SCREEN SIGNALS                                                 0
+// ===============================================================0
+// 1	PresetScroll	Normal Preset Browsing	Updates the main screen with the current preset number (ui_PresetN) and preset name (ui_PresetName). This is the default operating screen.
+// 2	LoadSaveExit	Cancel / Exit Menu	Exits any open modal (Save panel, naming text box, etc.), loads ui_Main, resets the mode to PresetScroll (1), and redraws the preset name.
+// 3	SaveSelectPreset	Save Step 1: Select Target Slot	Opens the Save Panel (ui_PresetSavePanel). Shows the original preset number/name in ui_PresetNOLD / ui_PresetNameOLD and shows the target destination slot.
+// 4	SaveSetName	Save Step 2: Edit Name	Unhides the name editing textarea (ui_PresetNewName), resets the cursor position to 0, and allows character-by-character editing with the encoder.
+// 5	SaveCompleted	Save Confirmation Toast	Hides the save panels, shows the popup message panel (ui_PresetSavedMesage) saying "PRESET SAVED" with a temporary timer, and returns mode to PresetScroll (1).
+// 6	Silent	Screen Silence / Bulk Transfer	Mutes all parameter toast popups and UI redraws. This is used while the Mainboard streams dozens of patch parameters so the screen doesn't flicker. Starts the expireSilentMode safety watchdog.
+// 7	CalibrationMenu	Auto-Calibration Menu	Hides the manual calibration sub-panel and loads the main tabbed calibration screen (ui_MANUALCALIBRATION).
+// 8	ManualCalibration	Manual Calibration Screen	Unhides ui_manualCalibrationPanel, loads ui_MANUALCALIBRATION, and immediately renders oscillator offsets, gap values, and waveform labels via drawManualCalibration().
+
 // Screen signal values
-static constexpr uint8_t SCREEN_SIGNAL_PRESET_SCROLL = 1;
-static constexpr uint8_t SCREEN_SIGNAL_SILENT        = 6;
+static constexpr uint8_t SCREEN_SIGNAL_NORMAL              = 1;  // NORMAL MODE
+static constexpr uint8_t SCREEN_SIGNAL_PRESET_SCROLL       = 1;  // NORMAL MODE   --- DUPLICATED CAUSE OF DIFFERENT NAMINGS
+static constexpr uint8_t SCREEN_SIGNAL_LOAD_SAVE_EXIT      = 2;
+static constexpr uint8_t SCREEN_SIGNAL_SAVE_SELECT_PRESET  = 3;
+static constexpr uint8_t SCREEN_SIGNAL_SAVE_SET_NAME       = 4;
+static constexpr uint8_t SCREEN_SIGNAL_SSAVE_COMPLETED     = 5;
+static constexpr uint8_t SCREEN_SIGNAL_SILENT              = 6;
+static constexpr uint8_t SCREEN_SIGNAL_CALIBRATION_MENU    = 7;
+static constexpr uint8_t SCREEN_SIGNAL_MANUAL_CALIBRATION  = 8;
 
 // Payload sizes (derived directly from canonical dimensions)
 static constexpr uint8_t SERIAL_LEN_ADSR_BLOCK           = 8;
@@ -79,6 +99,7 @@ static constexpr uint8_t SERIAL_BENCH_TEXT_DATA_MAX      = 15;
 static constexpr uint8_t SERIAL_LEN_BLOCK_OSC = 22;
 static constexpr uint8_t SERIAL_LEN_BLOCK_LFO = 33;
 static constexpr uint8_t SERIAL_LEN_BLOCK_MOD = (uint8_t)(MOD_SLOT_COUNT * 4u); // 32
+static constexpr uint8_t SERIAL_LEN_BLOCK_MIX = 21;
 
 // Compatibility aliases
 #define INPUT_CMD_PRESET_DIR_ENTRY   CMD_PRESET_DIR_ENTRY
@@ -138,6 +159,26 @@ struct ModSlotPacked {
 struct PatchModBlock {
   ModSlotPacked slots[MOD_SLOT_COUNT];
 };
+// 2. Add the struct definition
+struct PatchMixBlock {
+  uint8_t  osc1_level;
+  uint8_t  osc2_level;
+  uint8_t  osc3_level;
+  uint8_t  sub_level;
+  uint8_t  vca_level;
+  uint8_t  filter_mode;
+  int8_t   velocity_to_vcf;
+  int8_t   velocity_to_vca;
+  int16_t  vcf_keytrack;
+  int16_t  adsr1_to_vca;
+  uint16_t dist_drive;
+  uint16_t dist_mix;
+  uint8_t  adsr1_attack_curve;
+  uint8_t  adsr1_decay_curve;
+  uint8_t  adsr2_attack_curve;
+  uint8_t  adsr2_decay_curve;
+  uint8_t  misc_flags; // Bitmask: Bit0=ResComp, Bit1=VCA_Restart, Bit2=VCF_Restart, Bit3=ADSR3_En
+} __attribute__((packed));
 #pragma pack(pop)
 
 #endif // SERIAL_INPUT_PROTOCOL_H

@@ -227,6 +227,9 @@ enum ParamId : uint16_t {
   PARAM_UI_CALIBRATION_DISMISS   = 199,
   PARAM_UI_CALIBRATION_MENU_MODE = 200,
 
+  PARAM_UI_MENU_MODE             = 201,
+  
+
   // Pulse width (was Input 'f' block). Voice engine stores PW[0] = value / 4.
   PARAM_PW_VALUE                 = 210,
   PARAM_LFO3_SPEED               = 211,

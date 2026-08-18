@@ -15,7 +15,7 @@
 #include "serial_frame.h"
 
 static const uint32_t SERIAL_FRAME_TIMEOUT_US = 500;
-static const uint8_t SERIAL_DRAIN_BYTE_BUDGET = 64;
+static const uint8_t SERIAL_DRAIN_BYTE_BUDGET = 128;
 static const uint8_t MIDI_DRAIN_BYTE_BUDGET   = 32;
 
 enum SerialParserState : uint8_t {
