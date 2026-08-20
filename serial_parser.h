@@ -14,8 +14,8 @@
 #include <string.h>
 #include "serial_frame.h"
 
-static const uint32_t SERIAL_FRAME_TIMEOUT_US = 500;
-static const uint8_t SERIAL_DRAIN_BYTE_BUDGET = 128;
+static const uint32_t SERIAL_FRAME_TIMEOUT_US = 4000;
+static const uint16_t SERIAL_DRAIN_BYTE_BUDGET = 255;
 static const uint8_t MIDI_DRAIN_BYTE_BUDGET   = 32;
 
 enum SerialParserState : uint8_t {
@@ -139,7 +139,7 @@ static inline INPUT_ALWAYS_INLINE void serial_parser_process_byte_raw(SerialPars
 
 // --- DRAIN FUNCTION ---
 template<typename StreamT>
-static inline INPUT_ALWAYS_INLINE void serial_parser_drain(SerialParserContext& ctx, const SerialCommandTable& lut, StreamT& stream, uint8_t byte_budget) {
+static inline INPUT_ALWAYS_INLINE void serial_parser_drain(SerialParserContext& ctx, const SerialCommandTable& lut, StreamT& stream, uint16_t byte_budget) {
   int avail = stream.available();
   if (avail <= 0) {
     if (serial_parser_in_frame(ctx)) serial_parser_check_timeout(ctx, micros());

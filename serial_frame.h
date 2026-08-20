@@ -21,6 +21,22 @@ static constexpr uint8_t SERIAL_FRAME_DELIMITER = 0x00;
 
 static constexpr uint8_t SERIAL_STUFFED_MAX = (uint8_t)(1u + SERIAL_INNER_MAX_PAYLOAD + 2u);
 
+
+// Provide universal typed transmitters so boards stop manually allocating buffers
+template<typename StreamT>
+static inline void transmit_param16(StreamT& stream, uint8_t id, int16_t value) {
+    uint8_t payload[SERIAL_LEN_PARAM_16];
+    encode_param_p(payload, id, value);
+    serial_frame_write(stream, CMD_PARAM_16, payload, SERIAL_LEN_PARAM_16);
+}
+
+template<typename StreamT>
+static inline void transmit_param32(StreamT& stream, uint8_t id, uint32_t value) {
+    uint8_t payload[SERIAL_LEN_PARAM_32];
+    encode_param32(payload, id, value);
+    serial_frame_write(stream, CMD_PARAM_32, payload, SERIAL_LEN_PARAM_32);
+}
+
 // --- 1. CORE INNER PACKING (Always compiled) ---
 static inline INPUT_ALWAYS_INLINE uint8_t serial_inner_pack(uint8_t* dst, uint8_t cmd, const uint8_t* payload, uint8_t payload_len) {
   dst[0] = cmd;

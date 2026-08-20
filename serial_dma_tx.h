@@ -14,7 +14,7 @@
 #endif
 
 // 512 bytes ping-pong buffer provides plenty of headroom for bursts
-static constexpr uint16_t SERIAL_DMA_BUF_SIZE = 512;
+static constexpr uint16_t SERIAL_DMA_BUF_SIZE = 1024;
 
 struct SerialDmaEngine {
 #if defined(ARDUINO_ARCH_RP2040)

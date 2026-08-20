@@ -47,6 +47,7 @@ enum SharedSerialCmd : uint8_t {
   CMD_BLOCK_MIX          = 'Q'
 };
 
+
 // ===============================================================0
 // SCREEN SIGNALS                                                 0
 // ===============================================================0
@@ -99,12 +100,26 @@ static constexpr uint8_t SERIAL_BENCH_TEXT_DATA_MAX      = 15;
 static constexpr uint8_t SERIAL_LEN_BLOCK_OSC = 22;
 static constexpr uint8_t SERIAL_LEN_BLOCK_LFO = 33;
 static constexpr uint8_t SERIAL_LEN_BLOCK_MOD = (uint8_t)(MOD_SLOT_COUNT * 4u); // 32
-static constexpr uint8_t SERIAL_LEN_BLOCK_MIX = 21;
+static constexpr uint8_t SERIAL_LEN_BLOCK_MIX = 27;
 
 // Compatibility aliases
 #define INPUT_CMD_PRESET_DIR_ENTRY   CMD_PRESET_DIR_ENTRY
 #define INPUT_SERIAL_LEN_BULK_CHUNK  SERIAL_LEN_BULK_CHUNK
 #define INPUT_SERIAL_LEN_BULK_COMMIT SERIAL_LEN_BULK_COMMIT
+
+struct __attribute__((packed)) AdsrBlock {
+  uint16_t attack;
+  uint16_t decay;
+  uint16_t sustain;
+  uint16_t release;
+};
+
+struct __attribute__((packed)) FilterBlock {
+  uint16_t cutoff;
+  uint16_t resonance;
+  int16_t  env2_to_vcf;
+  uint16_t lfo2_to_vcf;
+};
 
 #pragma pack(push, 1)
 struct PatchOscBlock {
@@ -173,10 +188,18 @@ struct PatchMixBlock {
   int16_t  adsr1_to_vca;
   uint16_t dist_drive;
   uint16_t dist_mix;
+  // Envelope Curve Presets
   uint8_t  adsr1_attack_curve;
   uint8_t  adsr1_decay_curve;
+  uint8_t  adsr1_release_curve; 
   uint8_t  adsr2_attack_curve;
   uint8_t  adsr2_decay_curve;
+  uint8_t  adsr2_release_curve;  
+  uint8_t  adsr3_attack_curve;   
+  uint8_t  adsr3_decay_curve;    
+  uint8_t  adsr3_release_curve;  
+  uint8_t  vcf_trigger_mode;     
+
   uint8_t  misc_flags; // Bitmask: Bit0=ResComp, Bit1=VCA_Restart, Bit2=VCF_Restart, Bit3=ADSR3_En
 } __attribute__((packed));
 #pragma pack(pop)
