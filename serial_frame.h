@@ -1,3 +1,20 @@
+/**
+ * @file serial_frame.h
+ * @brief Low-Level Framing, Pipeline Packing, and Templated Serial Transmitters.
+ * 
+ * @details Implements the underlying wire-framing engine and typed outgoing message
+ * dispatchers for inter-board communication.
+ * 
+ * Key Capabilities:
+ *  - Raw delimiter-based and COBS (Consistent Overhead Byte Stuffing) encoding/decoding pipelines.
+ *  - Zero-allocation inner frame packing (`serial_inner_pack` / `serial_inner_unpack`).
+ *  - Templated DMA-aware transmission helpers (`transmit_param16`, `transmit_param32`) 
+ *    that eliminate boilerplate buffer allocation and manual endianness encoding across all MCUs.
+ * 
+ * @note Maximum inner payload is bounded by `SERIAL_INNER_MAX_PAYLOAD` (40 bytes) with 
+ * safe headroom for all packed domain patch blocks.
+ */
+
 #ifndef SERIAL_FRAME_H
 #define SERIAL_FRAME_H
 

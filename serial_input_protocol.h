@@ -1,3 +1,19 @@
+/**
+ * @file serial_input_protocol.h
+ * @brief Binary Wire Protocol Payload Definitions and Packed Domain Structs.
+ * 
+ * @details Defines the canonical byte-level struct representations for all bulk domain 
+ * transfers and live control blocks across the synth serial bus:
+ *  - AdsrBlock / FilterBlock: Direct 8-byte continuous panel & envelope streaming frames.
+ *  - PatchOscBlock / PatchLfoBlock / PatchMixBlock / PatchModBlock: Complete preset recall bursts.
+ * 
+ * @note Architecture Rules:
+ *  - All structures are strictly declared with `__attribute__((packed))`.
+ *  - Relies on native Little-Endian memory layout shared by all Cortex-M targets 
+ *    (RP2040, RP2350, STM32F4/F7/H7), enabling zero-copy pointer casting over UART RX buffers.
+ *  - Fixed payload length constants (`SERIAL_LEN_*`) must strictly match `sizeof()` of their structs.
+ */
+
 #ifndef SERIAL_INPUT_PROTOCOL_H
 #define SERIAL_INPUT_PROTOCOL_H
 

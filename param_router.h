@@ -1,3 +1,19 @@
+/**
+ * @file param_router.h
+ * @brief O(1) Jump Table Dispatcher and Parameter Router Builder.
+ * 
+ * @details Provides a high-performance, jump-table-driven parameter dispatch engine 
+ * designed for time-critical audio/CV microcontrollers.
+ * 
+ * Key Capabilities:
+ *  - Builds a static O(1) function pointer jump table (`PARAM_ROUTER_JUMP_SIZE = 256`) 
+ *    at startup from local descriptor arrays (`ParamDescriptorT`).
+ *  - Decouples parameter identification (`ParamId`) from local hardware execution, allowing
+ *    the DCO (Q24 pitch/drift), Mainboard (analog CV/DACs), and Input (RAM mirrors) to each
+ *    bind unique static applier functions to identical wire IDs.
+ *  - Provides linear fallback scanning for memory-constrained or non-contiguous environments.
+ */
+
 #ifndef PARAM_ROUTER_H
 #define PARAM_ROUTER_H
 

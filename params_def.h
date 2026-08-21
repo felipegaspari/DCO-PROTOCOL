@@ -1,24 +1,23 @@
 /**
  * @file params_def.h
- * @brief Canonical parameter definitions and manual calibration stage helpers.
- *
- * @details Every microcontroller in both DCO3-MONOSYNTH and DCO4-REBORN compiles
- * this single header from the shared DCO-PROTOCOL library to guarantee protocol
- * synchronization without numerical drift. It represents the strict union of all
- * parameter IDs across both architectures.
- *
- * MCUs ignore ParamIds they do not own or implement. For example:
- * - Sub-oscillator parameters (90–99) are monosynth/RP2350 specific.
- * - Preset commands (170–174) are strictly owned by the DCO LittleFS store.
- * - Filter/VCA curve shapers (48–56) are Mainboard-local.
- *
- * @note IMPORTANT ARCHITECTURAL RULES:
- * - Do not change the numerical values of existing IDs.
- * - New parameters must always receive new, unused integer IDs.
- * - ParamId semantics (name and integer identifier) must remain stable across all MCUs.
- * - This header is verified against host tooling via `gen_midi_map.py --check`.
+ * @brief Canonical Parameter Identifiers, Calibration Geometry, and Topology Helpers.
+ * 
+ * @details Master registry defining the union of all 16-bit `ParamId` values utilized across 
+ * the entire synthesizer ecosystem (DCO3-MONOSYNTH, DCO4-REBORN, and Host Tooling).
+ * 
+ * Key Responsibilities:
+ *  - Assigns immutable integer IDs for all oscillator gates, CV trims, LFOs, envelopes, 
+ *    mod matrix routes, and LittleFS preset commands.
+ *  - Contains manual calibration stage geometry and mapping functions (`cal_stage_to_osc_n`, 
+ *    `cal_stage_kind_n`, etc.) supporting both 3-oscillator mono and 8-oscillator poly topologies.
+ * 
+ * @note STRICT ARCHITECTURAL RULES:
+ *  - Never renumber existing `ParamId` values.
+ *  - New features must receive new, unused integer IDs at the end of their respective groups.
+ *  - Verified against host tooling via `gen_midi_map.py --check`.
  */
 
+ 
  #ifndef PARAMS_DEF_H
  #define PARAMS_DEF_H
  

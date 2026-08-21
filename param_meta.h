@@ -1,3 +1,22 @@
+/**
+ * @file param_meta.h
+ * @brief Universal Parameter Metadata, Display Scaling, and UI String Resolution.
+ * 
+ * @details Serves as the single source of truth for user-facing parameter metadata 
+ * across all display surfaces (Screen Controller LVGL UI and Host PC Bench GUI).
+ * 
+ * Key Responsibilities:
+ *  - Translates raw binary integer payloads into formatted mathematical display values
+ *    (e.g., detune bipolar offset -256, octave intervals /12, PWM center -512).
+ *  - Resolves static human-readable parameter labels and status strings.
+ *  - Maps numeric enum values to textual names for LFO waveforms, ADSR Bezier curves,
+ *    voice modes, and allocation policies.
+ * 
+ * @note Architecture Rules:
+ *  - Stateless and pure: Employs pass-by-value semantics with zero dynamic memory allocation.
+ *  - Universal submodule: Contains no board-specific `#ifdef` macros or mutable state.
+ */
+
 #ifndef PARAM_META_H
 #define PARAM_META_H
 
